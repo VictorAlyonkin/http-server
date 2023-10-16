@@ -10,21 +10,25 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
     private final int port;
     private final List<String> validPaths;
+    private final ExecutorService threadPool;
 
-    public Server(int port, List<String> validPaths) {
+    public Server(int port, List<String> validPaths, int numberThreads) {
         this.port = port;
         this.validPaths = validPaths;
+        this.threadPool = Executors.newFixedThreadPool(numberThreads);
     }
 
     public void start() {
         try (var serverSocket = new ServerSocket(this.port)) {
             while (!serverSocket.isClosed()) {
                 final var socket = serverSocket.accept();
-                connect(socket);
+                threadPool.execute(() -> this.connect(socket));
             }
         } catch (Exception e) {
             e.printStackTrace();
