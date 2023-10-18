@@ -1,5 +1,11 @@
 package ru.netology;
 
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
+import ru.netology.responce.Answer;
+import ru.netology.responce.Handler;
+import ru.netology.responce.HandlerImpl;
+
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -8,14 +14,20 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
+
+import static org.apache.commons.codec.Charsets.UTF_8;
 
 public class Server {
+    private static final String TEXT_PUBLIC = "public";
+    private static final String TEXT_POINT = ".";
+    private static final String TEXT_QUESTION_MARK = "?";
+    private static final String TEXT_SPACE = " ";
     private final int port;
     private final List<String> validPaths;
     private final ExecutorService threadPool;
@@ -45,84 +57,85 @@ public class Server {
             // read only request line for simplicity
             // must be in form GET /path HTTP/1.1
             final var requestLine = in.readLine();
-            final var parts = requestLine.split(" ");
+            final var parts = requestLine.split(TEXT_SPACE);
 
             if (parts.length != 3) {
                 // just close socket
                 return;
             }
 
-            Request request = new Request(parts[0], parts[1], parts[2]);
+            Request request = getRequest(parts);
             Handler handler = handlers.get(request.getNameMethod() + request.getNameHeading());
             if (handler != null) {
                 handler.handle(request, out);
                 return;
             }
 
-            final var path = parts[1];
-            if (!this.validPaths.contains(path)) {
-                String unsuccessfulAnswer = getUnsuccessfulAnswer();
-                out.write(unsuccessfulAnswer.getBytes());
-                out.flush();
+            final var nameHeading = request.getNameHeading();
+            if (!this.validPaths.contains(nameHeading)) {
+                sendNotFound(out);
                 return;
             }
 
-            final var filePath = Path.of(".", "public", path);
-            final var mimeType = Files.probeContentType(filePath);
-
-            // special case for classic
-            if (path.equals("/classic.html")) {
-                final var template = Files.readString(filePath);
-                final var content = template.replace(
-                        "{time}",
-                        LocalDateTime.now().toString()
-                ).getBytes();
-
-                String successAnswer = getSuccessfulAnswer(mimeType, content.length);
-
-                out.write(successAnswer.getBytes());
-                out.write(content);
-                out.flush();
-                return;
-            }
-
-            final var length = Files.size(filePath);
-
-            String successAnswer = getSuccessfulAnswer(mimeType, length);
-            out.write(successAnswer.getBytes());
-            Files.copy(filePath, out);
-            out.flush();
+            sendAnotherSuccessAnswer(request, out);
 
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public String getSuccessfulAnswer(String mimeType, long length) {
-        return "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: " + mimeType + "\r\n" +
-                "Content-Length: " + length + "\r\n" +
-                "Connection: close\r\n" +
-                "\r\n";
+    private Request getRequest(String[] parts) {
+        Request request;
+        int indexEndHeading = parts[1].indexOf(TEXT_QUESTION_MARK);
+        if (indexEndHeading != -1) {
+            request = createRequest(parts, indexEndHeading);
+            System.out.println(request.getQuery());
+        } else {
+            request = new Request(parts[0], parts[1], parts[2]);
+        }
+        return request;
     }
 
-    public String getUnsuccessfulAnswer() {
-        return "HTTP/1.1 404 Not Found\r\n" +
-                "Content-Length: 0\r\n" +
-                "Connection: close\r\n" +
-                "\r\n";
+    private Request createRequest(String[] parts, int indexEndHeading) {
+        String nameHeading = parts[1].substring(0, indexEndHeading);
+        int indexStartQuery = indexEndHeading + 1;
+        String queryText = parts[1].substring(indexStartQuery);
+        List<NameValuePair> queryParse = URLEncodedUtils.parse(queryText, UTF_8);
+        List<Parameter> query = queryParse.stream()
+                .map(nameValuePair -> new Parameter (nameValuePair.getName(), nameValuePair.getValue()))
+                .collect(Collectors.toList());
+
+        return new Request(parts[0], nameHeading, query, parts[2]);
     }
 
-    public String getSuccessfulAnswerWithoutMimeType(long length) {
-        return "HTTP/1.1 200 OK\r\n" +
-                "Content-Length: " + length + "\r\n" +
-                "Connection: close\r\n" +
-                "\r\n";
+    public void addHandlersToTheServer() {
+        this.addHandler("GET", "/messages", HandlerImpl.handlerGet());
+        this.addHandler("POST", "/messages", HandlerImpl.handlerPost());
+        this.addHandler("GET", "/classic.html", HandlerImpl.handlerGetForClassicHtml());
+        this.addHandler("GET", "/", HandlerImpl.handlerGet());
+        this.addHandler("POST", "/", HandlerImpl.handlerPost());
     }
 
     public synchronized void addHandler(String nameMethod, String nameHeading, Handler handler) {
         if (!handlers.containsKey(nameMethod + nameHeading)) {
             this.handlers.put(nameMethod + nameHeading, handler);
         }
+    }
+
+    public static void sendNotFound(BufferedOutputStream out) throws IOException {
+        String unsuccessfulAnswer = Answer.getUnsuccessfulAnswer();
+        out.write(unsuccessfulAnswer.getBytes());
+        out.flush();
+    }
+
+    public static void sendAnotherSuccessAnswer(Request request, BufferedOutputStream out) throws IOException {
+        final var filePath = Path.of(TEXT_POINT, TEXT_PUBLIC, request.getNameHeading());
+        final var mimeType = Files.probeContentType(filePath);
+        final var length = Files.size(filePath);
+
+        String successAnswer = Answer.getSuccessfulAnswer(mimeType, length);
+        out.write(successAnswer.getBytes());
+        Files.copy(filePath, out);
+        out.flush();
     }
 }
