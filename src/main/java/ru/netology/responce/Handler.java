@@ -1,4 +1,6 @@
-package ru.netology;
+package ru.netology.responce;
+
+import ru.netology.Request;
 
 import java.io.BufferedOutputStream;
 import java.io.IOException;
