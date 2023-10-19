@@ -24,6 +24,9 @@ public class Request {
     private String nameProtocol;
 
     public List<NameValuePair> getQueryParams() {
+        if (query == null) {
+            return null;
+        }
         return query;
     }
 

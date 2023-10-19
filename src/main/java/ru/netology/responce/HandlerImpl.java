@@ -37,6 +37,18 @@ public class HandlerImpl {
         };
     }
 
+    public static Handler handlerPostWithAnswer() {
+        return (request, out) -> {
+            String response = "Hello my friend. It`s POST method. You wrote this (may be): " +
+                    request.getQueryParams() + ". Look, this is work\" request.getQueryParam(\"lastName\"):\" " +
+                    request.getQueryParam("lastName");
+            String successfulAnswer = Answer.getSuccessfulAnswerWithoutMimeType(response.length());
+            out.write(successfulAnswer.getBytes(StandardCharsets.UTF_8));
+            out.write(response.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        };
+    }
+
     public static Handler handlerGetForClassicHtml() {
         return (request, out) -> {
             final var filePath = Path.of(".", "public", request.getNameHeading());
