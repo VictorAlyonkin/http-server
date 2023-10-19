@@ -25,7 +25,19 @@ public class Request {
         if (query == null) {
             return null;
         }
-        return query.toString();
+
+        StringBuilder result = new StringBuilder("\n");
+
+        for (int i = 0; i < query.size() ; i++) {
+            result.append(query.get(i).getKey())
+                    .append("=")
+                    .append(query.get(i).getValue());
+
+            if (i + 1 != query.size()) {
+                result.append("\n");
+            }
+        }
+        return result.toString();
     }
 
     public String getQueryParam(String name) {
